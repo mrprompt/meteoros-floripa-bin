@@ -12,3 +12,5 @@ build:
     url: "https://storage.meteoros.floripa.br/"
     captures: "D:/capturas"
     videos: "D:/capturas/videos"
+  output:
+    base: "C:/Users/thiago/Projetos/meteoros-floripa-site"

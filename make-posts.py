@@ -14,14 +14,14 @@ from git import Repo
 from PIL import ImageChops, Image
 from robocopy import robocopy
 
+
 PATH = os.path.dirname(__file__)
-PATH_OF_GIT_REPO = "{}/../".format(PATH)
-CONFIG_FILE = "{}/../_config.yml".format(PATH)
-PATH_OF_SITE_POSTS = "{}/../_posts/".format(PATH)
-PATH_OF_SITE_CAPTURES = "{}/../_captures/".format(PATH)
-PATH_OF_WATCH_CAPTURES = "{}/../_watches/".format(PATH)
-PATH_OF_ANALYZERS = "{}/../_data/".format(PATH)
-PATH_OF_STATIONS = "{}/../_stations/".format(PATH)
+CONFIG_FILE = "{}/_config.yml".format(PATH)
+PATH_OF_SITE_POSTS = "/_posts/"
+PATH_OF_SITE_CAPTURES = "/_captures/"
+PATH_OF_WATCH_CAPTURES = "/_watches/"
+PATH_OF_ANALYZERS = "/_data/"
+PATH_OF_STATIONS = "/_stations/"
 
 
 def load_config():
@@ -63,9 +63,9 @@ def organize_captures(stations_captures):
     populate_tables(captures_organized)
 
 
-def generate_stations(stations: list):
+def generate_stations(stations: list, output_dir: str = "./"):
     for index, station in enumerate(stations, start=1):
-        station_filename = PATH_OF_STATIONS + "{}.md".format(station)
+        station_filename = "{}/" + PATH_OF_STATIONS + "{}.md".format(output_dir, station)
 
         filehandle = open(station_filename, "w")
         filehandle.write("---\n")
@@ -76,7 +76,7 @@ def generate_stations(stations: list):
         filehandle.write("---\n")
 
 
-def generate_captures():
+def generate_captures(output_dir: str = "./"):
     def stack_captures(data, output_file):
         try:
             stack = Image.open(data[0])
@@ -101,7 +101,7 @@ def generate_captures():
         stack_output_dir = "./"
         night_start = str(data[0])
         station = str(data[1])
-        capture_filename = PATH_OF_SITE_CAPTURES + "{}_{}.md".format(station, night_start)
+        capture_filename = "{}{}{}_{}.md".format(output_dir, PATH_OF_SITE_CAPTURES, station, night_start)
 
         connection_cursor.execute("""
             SELECT id, night_start, station, files, files_full_path
@@ -154,7 +154,7 @@ def generate_captures():
         stack_captures(stack, "{}/stack.jpg".format(stack_output_dir))
 
 
-def generate_posts():
+def generate_posts(output_dir: str = "./"):
     connection_cursor = connection.cursor()
     connection_cursor.execute("""
     SELECT night_start, files
@@ -168,7 +168,7 @@ def generate_posts():
         month = str(night_start[4:6])
         year = str(night_start[0:4])
         file_preview = str(data[1])
-        post_filename = PATH_OF_SITE_POSTS + "{}-{}-{}-captures.md".format(year, month, day)
+        post_filename = "{}{}{}-{}-{}-captures.md".format(output_dir, PATH_OF_SITE_POSTS, year, month, day)
 
         filehandle = open(post_filename, "w+")
         filehandle.write("---\n")
@@ -180,7 +180,7 @@ def generate_posts():
         filehandle.close()
 
 
-def generate_watches():
+def generate_watches(output_dir: str = "./"):
     connection_cursor = connection.cursor()
     connection_cursor.execute("""
     SELECT night_start, station, files, files_full_path
@@ -200,7 +200,7 @@ def generate_watches():
         minute = capture_base_filename_spliced[1][2:4]
         second = capture_base_filename_spliced[1][4:6]
 
-        filehandle = open(PATH_OF_WATCH_CAPTURES + "{}.md".format(capture_base_filename.replace('P.jpg', '')), "w+")
+        filehandle = open("{}{}{}.md".format(output_dir, PATH_OF_WATCH_CAPTURES, capture_base_filename.replace('P.jpg', '')), "w+")
         filehandle.write("---\n")
         filehandle.write("layout: watch\n")
         filehandle.write("title: {} - {}/{}/{} - {}\n".format(station, day, month, year, capture_base_filename.replace('P.jpg', 'T.jpg')))
@@ -211,7 +211,7 @@ def generate_watches():
         filehandle.close()
 
 
-def generate_analyzers():
+def generate_analyzers(output_dir: str = "./"):
     connection_cursor = connection.cursor()
     connection_cursor.execute("""
     SELECT night_start, station
@@ -219,7 +219,7 @@ def generate_analyzers():
     GROUP BY night_start, station
     """)
     
-    analyzers_file = PATH_OF_ANALYZERS + "analyzers.yaml"
+    analyzers_file = output_dir + "/" + PATH_OF_ANALYZERS + "analyzers.yaml"
 
     for data in connection_cursor.fetchall():
         night_start = str(data[0])
@@ -294,7 +294,7 @@ def generate_analyzers():
             filehandle.close()
 
 
-def generate_videos(converter_path: str):
+def generate_videos(converter_path: str, output_dir: str = "./"):
     connection_cursor = connection.cursor()
     connection_cursor.execute("""
     SELECT files_full_path
@@ -303,7 +303,7 @@ def generate_videos(converter_path: str):
 
     for data in connection_cursor.fetchall():
         video_input = (data[0].replace('P.jpg', '.avi'))
-        video_output = (data[0].replace('P.jpg', '.mp4'))
+        video_output = output_dir + "/" + os.path.basename(data[0].replace('P.jpg', '.mp4'))
 
         convert_command = [
             converter_path,
@@ -357,38 +357,19 @@ def fix_path_delimiter(captures_list: list):
     return result
 
 
-def cleanup(days: int):
-    def delete_files(files_to_delete):
-        fix_paths = fix_path_delimiter(files_to_delete)
-
-        for file_to_delete in fix_paths:
-            os.remove(file_to_delete)
-
-    def cleanup_captures(days: int):
-        result = []
-        date_list = get_date_list(days, '%Y%m%d')
-
-        for date in date_list:
-            files = glob.glob("{}/*_{}.md".format(PATH_OF_SITE_CAPTURES, date))
-
-            result.extend(files)
-
-        delete_files(result)
-
-    cleanup_captures(days)
-
-
-def git_push():
+def git_push(path_of_git_repo: str):
     try:
         today = datetime.date.today()
 
-        repo = Repo(PATH_OF_GIT_REPO)
+        os.chdir(path_of_git_repo)
+
+        repo = Repo(path_of_git_repo)
         repo.git.add(update=True)
-        repo.git.add(PATH_OF_SITE_CAPTURES)
-        repo.git.add(PATH_OF_SITE_POSTS)
-        repo.git.add(PATH_OF_WATCH_CAPTURES)
-        repo.git.add(PATH_OF_ANALYZERS)
-        repo.git.add(PATH_OF_STATIONS)
+        repo.git.add(path_of_git_repo + PATH_OF_SITE_CAPTURES)
+        repo.git.add(path_of_git_repo + PATH_OF_SITE_POSTS)
+        repo.git.add(path_of_git_repo + PATH_OF_WATCH_CAPTURES)
+        repo.git.add(path_of_git_repo + PATH_OF_ANALYZERS)
+        repo.git.add(path_of_git_repo + PATH_OF_STATIONS)
         repo.index.commit("Captures of {}".format(today))
 
         origin = repo.remote(name='origin')
@@ -437,28 +418,28 @@ if __name__ == '__main__':
     organize_captures(captures)
 
     print("- Creating captures")
-    generate_captures()
+    generate_captures(config['build']['output']['base'])
 
     print("- Creating pages")
-    generate_posts()
+    generate_posts(config['build']['output']['base'])
 
     print("- Creating watches")
-    generate_watches()
-
-    print("- Creating video")
-    generate_videos(config['build']['converter']['path'])
+    generate_watches(config['build']['output']['base'])
 
     print("- Creating analyzers")
-    generate_analyzers()
+    generate_analyzers(config['build']['output']['base'])
+
+    print("- Creating video")
+    generate_videos(config['build']['converter']['path'], config['build']['storage']['videos'])
 
     print("- Uploading captures")
     upload_captures(config['build']['captures'], config['build']['storage']['captures'])
 
-    print("- Uploading videos")
-    upload_videos(config['build']['captures'], config['build']['storage']['videos'])
+#    print("- Uploading videos")
+#    upload_videos(config['build']['captures'], config['build']['storage']['videos'])
 
     print("- Push to git")
-    git_push()
+    git_push(config['build']['output']['base'])
 
     print("- Closing database connection")
     connection.close()
