@@ -1,79 +1,22 @@
 #!/usr/bin/env python3
 # -*- coding: utf8 -*-
-import datetime
-import glob
 import os
 import re
 import sqlite3
 import subprocess
-import yaml
-import shutil
+
+from utils import captures, config
 from xml.dom import minidom
-from typing import List
 from git import Repo
 from PIL import ImageChops, Image
 from robocopy import robocopy
 
 
-PATH = os.path.dirname(__file__)
-CONFIG_FILE = "{}/_config.yml".format(PATH)
 PATH_OF_SITE_POSTS = "/_posts/"
 PATH_OF_SITE_CAPTURES = "/_captures/"
 PATH_OF_WATCH_CAPTURES = "/_watches/"
 PATH_OF_ANALYZERS = "/_data/"
 PATH_OF_STATIONS = "/_stations/"
-
-
-def load_config():
-    with open(CONFIG_FILE, "r") as f:
-        return yaml.load(f, Loader=yaml.FullLoader)
-
-
-def organize_captures(stations_captures):
-    def populate_tables(captures_list: List):
-        connection_cursor = connection.cursor()
-        connection_cursor.execute("""
-        CREATE TABLE IF NOT EXISTS captures (
-            id INTEGER  NOT NULL PRIMARY KEY AUTOINCREMENT,
-            night_start DATE NOT NULL,
-            station VARCHAR(20) NOT NULL,
-            files TEXT,
-            files_full_path TEXT
-        );
-        """)
-
-        connection_cursor.executemany("""
-        INSERT INTO captures (night_start, station, files, files_full_path)
-        VALUES (?, ?, ?, ?)
-        """, captures_list)
-
-        connection.commit()
-
-    captures_organized = []
-
-    for capture in stations_captures:
-        base = re.findall("\w{3,5}\d{1,2}.+P\.jpg$", capture)
-        capture_spliced = base[0].split('/')
-        station = capture_spliced[0]
-        capture_date = capture_spliced[3]
-        post = (capture_date, station, base[0], capture)
-
-        captures_organized.append(post)
-
-    populate_tables(captures_organized)
-
-
-def generate_stations(stations: list, output_dir: str = "./"):
-    for index, station in enumerate(stations, start=1):
-        station_filename = "{}/" + PATH_OF_STATIONS + "{}.md".format(output_dir, station)
-
-        filehandle = open(station_filename, "w")
-        filehandle.write("---\n")
-        filehandle.write("layout: station\n")
-        filehandle.write("title: Capturas da esta&ccedil;&atilde;o {}\n".format(station))
-        filehandle.write("station: {}\n".format(station))
-        filehandle.write("navigation_weight: {}\n".format(index))
-        filehandle.write("---\n")
 
 
 def generate_captures(output_dir: str = "./"):
@@ -329,34 +272,6 @@ def generate_videos(converter_path: str, output_dir: str = "./"):
             subprocess.Popen(convert_command)
 
 
-def get_date_list(days: int, date_format: str = '%Y%m%d'):
-    return [(datetime.date.today() - datetime.timedelta(days=x)).strftime(date_format) for x in range(0, days)]
-
-
-def get_matching_captures(captures_dir: list, days: int):
-    result = []
-    date_list = get_date_list(days)
-
-    for directory in captures_dir:
-        for date in date_list:
-            files = glob.glob("{}/**/{}/*P.jpg".format(directory, date), recursive=True)
-
-            result.extend(files)
-
-    return fix_path_delimiter(result)
-
-
-def fix_path_delimiter(captures_list: list):
-    result = []
-
-    for path in captures_list:
-        path_fixed = path.replace("\\", "/")
-
-        result.append(path_fixed)
-
-    return result
-
-
 def git_push(path_of_git_repo: str):
     try:
         today = datetime.date.today()
@@ -386,60 +301,40 @@ def upload_captures(sources: list, captures_dest: str):
             print('Some error occurred uploading capture: ' + str(e))
 
 
-def upload_videos(sources: list, videos_dest: str):
-    connection_cursor = connection.cursor()
-    connection_cursor.execute("""
-    SELECT files_full_path
-    FROM captures
-    """)
-
-    for data in connection_cursor.fetchall():
-        video_input = (data[0].replace('P.jpg', '.mp4'))
-        
-        shutil.copy(video_input, videos_dest)
-
-
-
 if __name__ == '__main__':
     print("- Connecting to database")
     connection = sqlite3.connect(':memory:')
 
     print("- Loading site configuration")
-    config = load_config()
+    configuration = config.load_config()
 
     print('- Reading captures')
-    captures = get_matching_captures(config['build']['captures'], config['build']['days'])
+    files_captures = captures.get_captures(configuration['captures'], configuration['days'])
 
-    if len(captures) == 0:
+    if len(files_captures) == 0:
         print("- Nothing to do")
         exit(0)
 
-    print("- Organizing captures")
-    organize_captures(captures)
-
     print("- Creating captures")
-    generate_captures(config['build']['output']['base'])
+    generate_captures(configuration['output']['base'])
 
-    print("- Creating pages")
-    generate_posts(config['build']['output']['base'])
+    print("- Creating posts")
+    generate_posts(configuration['output']['base'])
 
     print("- Creating watches")
-    generate_watches(config['build']['output']['base'])
+    generate_watches(configuration['output']['base'])
 
     print("- Creating analyzers")
-    generate_analyzers(config['build']['output']['base'])
+    generate_analyzers(configuration['output']['base'])
 
-    print("- Creating video")
-    generate_videos(config['build']['converter']['path'], config['build']['storage']['videos'])
+    print("- Creating videos")
+    generate_videos(configuration['converter']['path'], configuration['storage']['videos'])
 
     print("- Uploading captures")
-    upload_captures(config['build']['captures'], config['build']['storage']['captures'])
-
-#    print("- Uploading videos")
-#    upload_videos(config['build']['captures'], config['build']['storage']['videos'])
+    upload_captures(configuration['captures'], configuration['storage']['captures'])
 
     print("- Push to git")
-    git_push(config['build']['output']['base'])
+    git_push(configuration['output']['base'])
 
     print("- Closing database connection")
     connection.close()

@@ -1,0 +1,12 @@
+# Build config
+days: 2
+captures:
+  - "/media/dados/capturas"
+converter:
+  path: "C:/bramon/tools/ffmpeg.exe"
+storage:
+  url: "https://storage.meteoros.floripa.br/"
+  captures: "D:/capturas"
+  videos: "D:/capturas/videos"
+output:
+  base: "/media/dados/Projetos/MeteorosFloripa/site-scripts"
