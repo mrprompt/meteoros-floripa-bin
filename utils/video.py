@@ -3,7 +3,7 @@ import subprocess
 
 from . import config
 
-def converter(video_input: str, video_output: str):
+def converter(video_input: str, video_output: str) -> None:
     configuration = config.load_config()
     converter_path = configuration['converter']['path']
 

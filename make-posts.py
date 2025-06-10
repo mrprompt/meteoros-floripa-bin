@@ -26,7 +26,7 @@ def generate_captures(output_dir: str = "./"):
     """)
 
     for data in connection_cursor.fetchall():
-        stack = []
+        stack: list[str] = []
         stack_output_dir = "./"
         night_start = str(data[0])
         station = str(data[1])

@@ -66,6 +66,6 @@ def upload_captures(sources: List[str], captures_dest: str) -> None:
 
     for source in sources:
         try:
-            robocopy.copy(source, captures_dest, "/xf *.mp4 /xf *.avi /xo")
+            robocopy.copy(source, captures_dest, "/xf *.mp4 /xf *.avi /xo") # type: ignore
         except Exception as e:
             print('Some error occurred uploading capture: ' + str(e))

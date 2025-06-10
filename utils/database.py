@@ -1,10 +1,13 @@
 import sqlite3
+from sqlite3 import (
+    Connection as Connection
+)
 from typing import List, Tuple
 
 CaptureRecord = Tuple[str, str, str, str]
 
 
-def get_connection():
+def get_connection() -> Connection:
     return sqlite3.connect('capturas.db')
 
 
