@@ -296,6 +296,9 @@ if __name__ == '__main__':
     print("- Uploading captures")
     captures.upload_captures(configuration['captures'], configuration['storage']['captures'])
 
+    print("- Push to git")
+    git_push(configuration['output']['base'])
+
     print("- Closing database connection")
     database.close_connection()
 
