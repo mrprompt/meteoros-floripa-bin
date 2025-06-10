@@ -193,4 +193,7 @@ cython_debug/
 .cursorignore
 .cursorindexingignore
 .vscode
+tmp
+
 _config.yml
+capturas.db

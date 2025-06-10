@@ -2,14 +2,11 @@
 # -*- coding: utf8 -*-
 import os
 import re
-import sqlite3
-import subprocess
 
-from utils import captures, config
+from utils import captures, config,  database, video
 from xml.dom import minidom
 from git import Repo
-from PIL import ImageChops, Image
-from robocopy import robocopy
+
 
 
 PATH_OF_SITE_POSTS = "/_posts/"
@@ -20,18 +17,7 @@ PATH_OF_STATIONS = "/_stations/"
 
 
 def generate_captures(output_dir: str = "./"):
-    def stack_captures(data, output_file):
-        try:
-            stack = Image.open(data[0])
-
-            for i in range(1, len(data)):
-                current_image = Image.open(data[i])
-                stack = ImageChops.lighter(stack, current_image)
-
-            stack.save(output_file, "JPEG")
-        except:
-            pass
-
+    connection = database.get_connection()
     connection_cursor = connection.cursor()
     connection_cursor.execute("""
     SELECT night_start, station
@@ -94,10 +80,11 @@ def generate_captures(output_dir: str = "./"):
         filehandle.write("---\n")
         filehandle.close()
 
-        stack_captures(stack, "{}/stack.jpg".format(stack_output_dir))
+        captures.stack(stack, "{}/stack.jpg".format(stack_output_dir))
 
 
 def generate_posts(output_dir: str = "./"):
+    connection = database.get_connection()
     connection_cursor = connection.cursor()
     connection_cursor.execute("""
     SELECT night_start, files
@@ -124,6 +111,7 @@ def generate_posts(output_dir: str = "./"):
 
 
 def generate_watches(output_dir: str = "./"):
+    connection = database.get_connection()
     connection_cursor = connection.cursor()
     connection_cursor.execute("""
     SELECT night_start, station, files, files_full_path
@@ -155,6 +143,7 @@ def generate_watches(output_dir: str = "./"):
 
 
 def generate_analyzers(output_dir: str = "./"):
+    connection = database.get_connection()
     connection_cursor = connection.cursor()
     connection_cursor.execute("""
     SELECT night_start, station
@@ -215,7 +204,7 @@ def generate_analyzers(output_dir: str = "./"):
                 elevation_start = elevation_final = "__none__"
                 altitude_start = altitude_final = "__none__"
 
-            base = re.findall("\w{3}\d{1,2}.+", capture[3])
+            base = re.findall(r"\w{3}\d{1,2}.+", capture[3])
 
             filehandle = open(analyzers_file, "a")
             filehandle.write("{}:\n".format(base[0]))
@@ -237,7 +226,8 @@ def generate_analyzers(output_dir: str = "./"):
             filehandle.close()
 
 
-def generate_videos(converter_path: str, output_dir: str = "./"):
+def generate_videos(output_dir: str = "./"):
+    connection = database.get_connection()
     connection_cursor = connection.cursor()
     connection_cursor.execute("""
     SELECT files_full_path
@@ -248,28 +238,7 @@ def generate_videos(converter_path: str, output_dir: str = "./"):
         video_input = (data[0].replace('P.jpg', '.avi'))
         video_output = output_dir + "/" + os.path.basename(data[0].replace('P.jpg', '.mp4'))
 
-        convert_command = [
-            converter_path,
-            '-loglevel',
-            'error',
-            '-hide_banner',
-            '-nostats',
-            '-n',
-            '-i',
-            video_input,
-            '-c:v',
-            'libx264',
-            '-profile:v',
-            'baseline',
-            '-level',
-            '3.0',
-            '-pix_fmt',
-            'yuv420p',
-            video_output
-        ]
-
-        if os.path.exists(video_input) and not os.path.exists(video_output):
-            subprocess.Popen(convert_command)
+        video.converter(video_input, video_output)
 
 
 def git_push(path_of_git_repo: str):
@@ -293,18 +262,7 @@ def git_push(path_of_git_repo: str):
         print('Some error occurred while pushing the code')
 
 
-def upload_captures(sources: list, captures_dest: str):
-    for source in sources:
-        try:
-            robocopy.copy(source, captures_dest, "/xf *.mp4 /xf *.avi /xo")
-        except Exception as e:
-            print('Some error occurred uploading capture: ' + str(e))
-
-
 if __name__ == '__main__':
-    print("- Connecting to database")
-    connection = sqlite3.connect(':memory:')
-
     print("- Loading site configuration")
     configuration = config.load_config()
 
@@ -328,15 +286,12 @@ if __name__ == '__main__':
     generate_analyzers(configuration['output']['base'])
 
     print("- Creating videos")
-    generate_videos(configuration['converter']['path'], configuration['storage']['videos'])
+    generate_videos(configuration['storage']['videos'])
 
     print("- Uploading captures")
-    upload_captures(configuration['captures'], configuration['storage']['captures'])
+    captures.upload_captures(configuration['captures'], configuration['storage']['captures'])
 
     print("- Push to git")
     git_push(configuration['output']['base'])
-
-    print("- Closing database connection")
-    connection.close()
 
     print("- Done :)")
