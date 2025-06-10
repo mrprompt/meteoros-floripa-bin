@@ -1,59 +1,19 @@
 #!/usr/bin/env python3
 # -*- coding: utf8 -*-
-import glob
 import os
 import re
-import sqlite3
-import yaml
+import datetime
+
+from utils import captures, config,  database
 from xml.dom import minidom
-from typing import List
+from git import Repo
 
 
-PATH = os.path.dirname(__file__)
-PATH_OF_GIT_REPO = "{}/../".format(PATH)
-CONFIG_FILE = "{}/../_config.yml".format(PATH)
-PATH_OF_SITE_POSTS = "{}/../_posts/".format(PATH)
-PATH_OF_SITE_CAPTURES = "{}/../_captures/".format(PATH)
-PATH_OF_WATCH_CAPTURES = "{}/../_watches/".format(PATH)
-PATH_OF_ANALYZERS = "{}/../_data/".format(PATH)
-PATH_OF_STATIONS = "{}/../_stations/".format(PATH)
-
-
-def organize_captures(stations_captures):
-    def populate_tables(captures_list: List):
-        connection_cursor = connection.cursor()
-        connection_cursor.execute("""
-        CREATE TABLE IF NOT EXISTS captures (
-            id INTEGER  NOT NULL PRIMARY KEY AUTOINCREMENT,
-            night_start DATE NOT NULL,
-            station VARCHAR(20) NOT NULL,
-            files TEXT,
-            files_full_path TEXT
-        );
-        """)
-
-        connection_cursor.executemany("""
-        INSERT INTO captures (night_start, station, files, files_full_path)
-        VALUES (?, ?, ?, ?)
-        """, captures_list)
-
-        connection.commit()
-
-    captures_organized = []
-
-    for capture in stations_captures:
-        base = re.findall("\w{3,5}\d{1,2}.+P\.jpg$", capture)
-        capture_spliced = base[0].split('/')
-        station = capture_spliced[0]
-        capture_date = capture_spliced[3]
-        post = (capture_date, station, base[0], capture)
-
-        captures_organized.append(post)
-
-    populate_tables(captures_organized)
+PATH_OF_ANALYZERS = "/_data/"
 
 
 def generate_analyzers():
+    connection = database.get_connection()
     connection_cursor = connection.cursor()
     connection_cursor.execute("""
     SELECT night_start, station
@@ -113,7 +73,7 @@ def generate_analyzers():
                 elevation_start = elevation_final = "__none__"
                 altitude_start = altitude_final = "__none__"
 
-            base = re.findall("\w{3}\d{1,2}.+", capture[3])
+            base = re.findall(r"\w{3}\d{1,2}.+", capture[3])
 
             filehandle = open(capture_filename, "a")
             filehandle.write("{}:\n".format(base[0]))
@@ -135,55 +95,43 @@ def generate_analyzers():
             filehandle.close()
 
 
-def get_matching_captures(captures_dir: list):
-    result = []
+def git_push(path_of_git_repo: str):
+    try:
+        os.chdir(path_of_git_repo)
 
-    for directory in captures_dir:
-        files = glob.glob("{}/**/*P.jpg".format(directory), recursive=True)
+        repo = Repo(path_of_git_repo)
+        repo.git.add(update=True)
+        repo.git.add(path_of_git_repo + PATH_OF_ANALYZERS)
+        
+        repo.index.commit("Update analyzers")
 
-        result.extend(files)
-
-    return fix_path_delimiter(result)
-
-
-def fix_path_delimiter(captures_list: list):
-    result = []
-
-    for path in captures_list:
-        path_fixed = path.replace("\\", "/")
-
-        result.append(path_fixed)
-
-    return result
-
-
-def load_config():
-    with open(CONFIG_FILE, "r") as f:
-        return yaml.load(f, Loader=yaml.FullLoader)
-
+        origin = repo.remote(name='origin')
+        origin.push()
+    except:
+        print("- Some error occurred while pushing the code")
 
 if __name__ == '__main__':
-    print("- Connecting to database")
-    connection = sqlite3.connect(':memory:')
-
     print("- Loading site configuration")
-    config = load_config()
-    captures_dir = config['build']['captures']
+    configuration = config.load_config()
 
-    print('- Reading captures')
-    captures = get_matching_captures(captures_dir)
+    print("- Reading captures")
+    files_captures = captures.get_captures(configuration['captures'], configuration['days'])
 
-    if len(captures) == 0:
+    if len(files_captures) == 0:
         print("- Nothing to do")
-        exit(0)
+        print("- Closing database connection")
 
-    print("- Organizing captures")
-    organize_captures(captures)
+        database.close_connection()
+
+        exit(0)
 
     print("- Creating analyzers")
     generate_analyzers()
 
+    print("- Push to git")
+    git_push(configuration['output']['base'])
+
     print("- Closing database connection")
-    connection.close()
+    database.close_connection()
 
     print("- Done :)")
