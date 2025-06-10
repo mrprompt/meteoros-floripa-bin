@@ -2,15 +2,14 @@
 # -*- coding: utf8 -*-
 import argparse
 import csv
-import os
-import sqlite3
+
+from utils import database
+
+PATH_OF_ANALYZERS = "/_data/"
 
 
-PATH = os.path.dirname(__file__)
-PATH_OF_ANALYZERS = "{}/../_data/".format(PATH)
-
-
-def import_showers_file(showers_file):
+def import_showers_file(showers_file: str):
+    connection = database.get_connection()
     connection_cursor = connection.cursor()
     connection_cursor.execute("""
         CREATE TABLE IF NOT EXISTS showers (
@@ -21,7 +20,8 @@ def import_showers_file(showers_file):
         );
         """)
 
-    showers = []
+    from typing import List
+    showers: List[List[str]] = []
 
     with open(showers_file) as csvfile:
         csv_reader = csv.reader(csvfile, delimiter='|', quotechar='"')
@@ -49,7 +49,8 @@ def import_showers_file(showers_file):
     connection.commit()
 
 
-def generate_shower():
+def generate_shower(output_dir: str = "./"):
+    connection = database.get_connection()
     connection_cursor = connection.cursor()
     connection_cursor.execute("""
     SELECT *
@@ -57,8 +58,8 @@ def generate_shower():
     GROUP BY Code
     """)
 
-    capture_filename = PATH_OF_ANALYZERS + "showers.yaml"
-    filehandle = open(capture_filename, "w")
+    showers_file = output_dir + "/" + PATH_OF_ANALYZERS + "showers.yaml"
+    filehandle = open(showers_file, "w")
 
     for shower in connection_cursor.fetchall():
         filehandle.write("J8_{}:\n".format(shower[3].strip()))
@@ -91,6 +92,7 @@ def generate_shower():
         filehandle.write("  Submission: \"{}\"\n".format(shower[27].strip()))
         filehandle.write("  date: \"{}\"\n".format(shower[28].strip()))
         filehandle.write("  UTC: \"{}\"\n".format(shower[29].strip()))
+    
     filehandle.close()
 
 
@@ -101,16 +103,10 @@ if __name__ == '__main__':
     args = parser.parse_args()
     csv_file = args.showers_file
 
-    print("- Connecting to database")
-    connection = sqlite3.connect(':memory:')
-
     print("- Importing showers data")
     import_showers_file(csv_file)
 
     print("- Generating shower data to site")
     generate_shower()
-
-    print("- Closing database connection")
-    connection.close()
 
     print("- Done :)")
