@@ -2,11 +2,11 @@
 # -*- coding: utf8 -*-
 import os
 import re
+import datetime
 
 from utils import captures, config,  database, video
 from xml.dom import minidom
 from git import Repo
-
 
 
 PATH_OF_SITE_POSTS = "/_posts/"
@@ -254,23 +254,28 @@ def git_push(path_of_git_repo: str):
         repo.git.add(path_of_git_repo + PATH_OF_WATCH_CAPTURES)
         repo.git.add(path_of_git_repo + PATH_OF_ANALYZERS)
         repo.git.add(path_of_git_repo + PATH_OF_STATIONS)
+        
         repo.index.commit("Captures of {}".format(today))
 
         origin = repo.remote(name='origin')
         origin.push()
     except:
-        print('Some error occurred while pushing the code')
+        print("- Some error occurred while pushing the code")
 
 
 if __name__ == '__main__':
     print("- Loading site configuration")
     configuration = config.load_config()
 
-    print('- Reading captures')
+    print("- Reading captures")
     files_captures = captures.get_captures(configuration['captures'], configuration['days'])
 
     if len(files_captures) == 0:
         print("- Nothing to do")
+        print("- Closing database connection")
+
+        database.close_connection()
+
         exit(0)
 
     print("- Creating captures")
@@ -293,5 +298,8 @@ if __name__ == '__main__':
 
     print("- Push to git")
     git_push(configuration['output']['base'])
+
+    print("- Closing database connection")
+    database.close_connection()
 
     print("- Done :)")
