@@ -3,20 +3,13 @@
 import os
 import re
 import datetime
+import json
 
 from utils import captures, config,  database, video
 from xml.dom import minidom
-from git import Repo
 
 
-PATH_OF_SITE_POSTS = "/_posts/"
-PATH_OF_SITE_CAPTURES = "/_captures/"
-PATH_OF_WATCH_CAPTURES = "/_watches/"
-PATH_OF_ANALYZERS = "/_data/"
-PATH_OF_STATIONS = "/_stations/"
-
-
-def generate_captures(output_dir: str = "./"):
+def generate_captures_data():
     connection = database.get_connection()
     connection_cursor = connection.cursor()
     connection_cursor.execute("""
@@ -25,13 +18,13 @@ def generate_captures(output_dir: str = "./"):
     GROUP BY night_start, station
     """)
 
+    all_captures_data = []
+
     for data in connection_cursor.fetchall():
-        stack: list[str] = []
-        stack_output_dir = "./"
+        stack_files: list[str] = []
         night_start = str(data[0])
         station = str(data[1])
-        capture_filename = "{}{}{}_{}.md".format(output_dir, PATH_OF_SITE_CAPTURES, station, night_start)
-
+        
         connection_cursor.execute("""
             SELECT id, night_start, station, files, files_full_path
             FROM captures
@@ -40,12 +33,14 @@ def generate_captures(output_dir: str = "./"):
             ORDER BY station
             """, (night_start, station))
 
+        capture_items = []
+        stack_output_dir = ""
+
         for capture in connection_cursor.fetchall():
-            stack.append(capture[4])
+            stack_files.append(capture[4])
             stack_output_dir = os.path.dirname(capture[4])
 
             file = capture[3]
-
             capture_spliced = file.split('/')
             capture_base_filename = capture_spliced[-1]
             capture_data_spliced = capture_base_filename.split('_')
@@ -60,30 +55,27 @@ def generate_captures(output_dir: str = "./"):
             capture_minute = capture_time[2:4]
             capture_second = capture_time[4:6]
 
-            if not os.path.exists(capture_filename):
-                filehandle = open(capture_filename, "w+")
-                filehandle.write("---\n")
-                filehandle.write("layout: capture\n")
-                filehandle.write("label: {}\n".format(night_start))
-                filehandle.write("title: Capturas da esta&ccedil;&atilde;o {}\n".format(station))
-                filehandle.write("station: {}\n".format(station))
-                filehandle.write("date: {}-{}-{} {}:{}:{}\n".format(capture_year, capture_month, capture_day, capture_hour, capture_minute, capture_second))
-                filehandle.write("preview: {}/stack.jpg\n".format(os.path.dirname(file)))
-                filehandle.write("capturas:\n")
-            else:
-                filehandle = open(capture_filename, "a")
+            capture_items.append({
+                "image": file,
+                "date_full": f"{capture_year}-{capture_month}-{capture_day} {capture_hour}:{capture_minute}:{capture_second}"
+            })
+        
+        if stack_files:
+            stack_image_path = f"{stack_output_dir}/stack.jpg"
+            captures.stack(stack_files, stack_image_path)
 
-            filehandle.write("  - imagem: {}\n".format(file))
-            filehandle.close()
-
-        filehandle = open(capture_filename, "a")
-        filehandle.write("---\n")
-        filehandle.close()
-
-        captures.stack(stack, "{}/stack.jpg".format(stack_output_dir))
+            all_captures_data.append({
+                "night_start": night_start,
+                "station": station,
+                "title": f"Capturas da estação {station}",
+                "preview": stack_image_path,
+                "captures": capture_items
+            })
+    
+    return all_captures_data
 
 
-def generate_posts(output_dir: str = "./"):
+def generate_posts_data():
     connection = database.get_connection()
     connection_cursor = connection.cursor()
     connection_cursor.execute("""
@@ -92,35 +84,37 @@ def generate_posts(output_dir: str = "./"):
     GROUP BY night_start
     """)
 
+    all_posts_data = []
+
     for data in connection_cursor.fetchall():
         night_start = str(data[0])
         day = str(night_start[6:8])
         month = str(night_start[4:6])
         year = str(night_start[0:4])
         file_preview = str(data[1])
-        post_filename = "{}{}{}-{}-{}-captures.md".format(output_dir, PATH_OF_SITE_POSTS, year, month, day)
-
-        filehandle = open(post_filename, "w+")
-        filehandle.write("---\n")
-        filehandle.write("layout: post\n")
-        filehandle.write("title: {}/{}/{}\n".format(day, month, year))
-        filehandle.write("date: {}-{}-{} 10:00:00\n".format(year, month, day))
-        filehandle.write("preview: {}/stack.jpg\n".format(os.path.dirname(file_preview)))
-        filehandle.write("---\n")
-        filehandle.close()
+        
+        all_posts_data.append({
+            "title": f"{day}/{month}/{year}",
+            "date": f"{year}-{month}-{day} 10:00:00",
+            "preview": f"{os.path.dirname(file_preview)}/stack.jpg"
+        })
+    
+    return all_posts_data
 
 
-def generate_watches(output_dir: str = "./"):
+def generate_watches_data():
     connection = database.get_connection()
     connection_cursor = connection.cursor()
     connection_cursor.execute("""
-    SELECT night_start, station, files, files_full_path
+    SELECT files, station
     FROM captures
     """)
 
+    all_watches_data = []
+
     for data in connection_cursor.fetchall():
+        file = str(data[0])
         station = str(data[1])
-        file = str(data[2])
         capture_spliced = file.split('/')
         capture_base_filename = capture_spliced[-1]
         capture_base_filename_spliced = capture_base_filename.split('_')
@@ -130,19 +124,21 @@ def generate_watches(output_dir: str = "./"):
         hour = capture_base_filename_spliced[1][0:2]
         minute = capture_base_filename_spliced[1][2:4]
         second = capture_base_filename_spliced[1][4:6]
+        
+        base_name_without_ext = capture_base_filename.replace('P.jpg', '')
 
-        filehandle = open("{}{}{}.md".format(output_dir, PATH_OF_WATCH_CAPTURES, capture_base_filename.replace('P.jpg', '')), "w+")
-        filehandle.write("---\n")
-        filehandle.write("layout: watch\n")
-        filehandle.write("title: {} - {}/{}/{} - {}\n".format(station, day, month, year, capture_base_filename.replace('P.jpg', 'T.jpg')))
-        filehandle.write("date: {}-{}-{} {}:{}:{}\n".format(year, month, day, hour, minute, second))
-        filehandle.write("permalink: /{}/{}/{}/watch/{}\n".format(year, month, day, capture_base_filename.replace('P.jpg', '')))
-        filehandle.write("capture: {}\n".format(file.replace('P.jpg', 'T.jpg')))
-        filehandle.write("---\n")
-        filehandle.close()
+        all_watches_data.append({
+            "station": station,
+            "title": f"{station} - {day}/{month}/{year} - {base_name_without_ext}T.jpg",
+            "date": f"{year}-{month}-{day} {hour}:{minute}:{second}",
+            "permalink": f"/{year}/{month}/{day}/watch/{base_name_without_ext}",
+            "capture": file.replace('P.jpg', 'T.jpg')
+        })
+    
+    return all_watches_data
 
 
-def generate_analyzers(output_dir: str = "./"):
+def generate_analyzers_data():
     connection = database.get_connection()
     connection_cursor = connection.cursor()
     connection_cursor.execute("""
@@ -151,7 +147,7 @@ def generate_analyzers(output_dir: str = "./"):
     GROUP BY night_start, station
     """)
     
-    analyzers_file = output_dir + "/" + PATH_OF_ANALYZERS + "analyzers.yaml"
+    all_analyzers_data = {}
 
     for data in connection_cursor.fetchall():
         night_start = str(data[0])
@@ -205,28 +201,29 @@ def generate_analyzers(output_dir: str = "./"):
                 altitude_start = altitude_final = "__none__"
 
             base = re.findall(r"\w{3}\d{1,2}.+", capture[3])
+            if base:
+                all_analyzers_data[base[0]] = {
+                    "station": station,
+                    "class": classe,
+                    "magnitude": magnitude,
+                    "duration": duration,
+                    "latitude_start": latitude_start,
+                    "longitude_start": longitude_start,
+                    "latitude_final": latitude_final,
+                    "longitude_final": longitude_final,
+                    "velocity": velocity,
+                    "azimute_start": azimute_start,
+                    "azimute_final": azimute_final,
+                    "elevation_start": elevation_start,
+                    "elevation_final": elevation_final,
+                    "altitude_start": altitude_start,
+                    "altitude_final": altitude_final
+                }
+    
+    return all_analyzers_data
 
-            filehandle = open(analyzers_file, "a")
-            filehandle.write("{}:\n".format(base[0]))
-            filehandle.write("  station: {}\n".format(station))
-            filehandle.write("  class: {}\n".format(classe))
-            filehandle.write("  magnitude: {}\n".format(magnitude))
-            filehandle.write("  duration: {}\n".format(duration))
-            filehandle.write("  latitude_start: {}\n".format(latitude_start))
-            filehandle.write("  longitude_start: {}\n".format(longitude_start))
-            filehandle.write("  latitude_final: {}\n".format(latitude_final))
-            filehandle.write("  longitude_final: {}\n".format(longitude_final))
-            filehandle.write("  velocity: {}\n".format(velocity))
-            filehandle.write("  azimute_start: {}\n".format(azimute_start))
-            filehandle.write("  azimute_final: {}\n".format(azimute_final))
-            filehandle.write("  elevation_start: {}\n".format(elevation_start))
-            filehandle.write("  elevation_final: {}\n".format(elevation_final))
-            filehandle.write("  altitude_start: {}\n".format(altitude_start))
-            filehandle.write("  altitude_final: {}\n".format(altitude_final))
-            filehandle.close()
 
-
-def generate_videos(output_dir: str = "./"):
+def generate_videos_data(output_dir: str = "./"):
     connection = database.get_connection()
     connection_cursor = connection.cursor()
     connection_cursor.execute("""
@@ -234,33 +231,21 @@ def generate_videos(output_dir: str = "./"):
     FROM captures
     """)
 
+    all_videos_data = []
+
     for data in connection_cursor.fetchall():
         video_input = (data[0].replace('P.jpg', '.avi'))
         video_output = output_dir + "/" + os.path.basename(data[0].replace('P.jpg', '.mp4'))
 
-        video.converter(video_input, video_output)
-
-
-def git_push(path_of_git_repo: str):
-    try:
-        today = datetime.date.today()
-
-        os.chdir(path_of_git_repo)
-
-        repo = Repo(path_of_git_repo)
-        repo.git.add(update=True)
-        repo.git.add(path_of_git_repo + PATH_OF_SITE_CAPTURES)
-        repo.git.add(path_of_git_repo + PATH_OF_SITE_POSTS)
-        repo.git.add(path_of_git_repo + PATH_OF_WATCH_CAPTURES)
-        repo.git.add(path_of_git_repo + PATH_OF_ANALYZERS)
-        repo.git.add(path_of_git_repo + PATH_OF_STATIONS)
+        video.converter(video_input, video_output) # This still performs the conversion as a side effect
         
-        repo.index.commit("Captures of {}".format(today))
-
-        origin = repo.remote(name='origin')
-        origin.push()
-    except:
-        print("- Some error occurred while pushing the code")
+        all_videos_data.append({
+            "input_path": video_input,
+            "output_path": video_output,
+            "converted": os.path.exists(video_output) # Indicate if conversion was successful
+        })
+    
+    return all_videos_data
 
 
 if __name__ == '__main__':
@@ -278,26 +263,30 @@ if __name__ == '__main__':
 
         exit(0)
 
-    print("- Creating captures")
-    generate_captures(configuration['output']['base'])
+    all_output_data = {}
 
-    print("- Creating posts")
-    generate_posts(configuration['output']['base'])
+    print("- Generating captures data")
+    all_output_data['captures'] = generate_captures_data()
 
-    print("- Creating watches")
-    generate_watches(configuration['output']['base'])
+    print("- Generating posts data")
+    all_output_data['posts'] = generate_posts_data()
 
-    print("- Creating analyzers")
-    generate_analyzers(configuration['output']['base'])
+    print("- Generating watches data")
+    all_output_data['watches'] = generate_watches_data()
 
-    print("- Creating videos")
-    generate_videos(configuration['storage']['videos'])
+    print("- Generating analyzers data")
+    all_output_data['analyzers'] = generate_analyzers_data()
 
-    print("- Uploading captures")
+    print("- Generating videos data (and converting videos)")
+    all_output_data['videos'] = generate_videos_data(configuration['storage']['videos'])
+
+    print("- Uploading captures (Windows only)")
     captures.upload_captures(configuration['captures'], configuration['storage']['captures'])
 
-    print("- Push to git")
-    git_push(configuration['output']['base'])
+    output_json_path = os.path.join(configuration['output']['base'], "output.json")
+    print(f"- Writing all data to {output_json_path}")
+    with open(output_json_path, "w", encoding="utf-8") as f:
+        json.dump(all_output_data, f, ensure_ascii=False, indent=2)
 
     print("- Closing database connection")
     database.close_connection()
