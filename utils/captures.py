@@ -4,20 +4,25 @@ import sys
 from . import utils, database
 from robocopy import robocopy
 from PIL import ImageChops, Image
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 
 CaptureRecord = Tuple[str, str, str, str]
 
 
-def get_matching_captures(captures_dir: List[str], days: int) -> List[str]:
+def get_matching_captures(captures_dir: List[str], days: Optional[int] = None) -> List[str]:
     result: list[str] = []
-    date_list = utils.get_date_list(days)
 
     for directory in captures_dir:
-        for date in date_list:
-            files = glob.glob("{}/**/{}/*P.jpg".format(directory, date), recursive=True)
-
+        if days is None or days <= 0:
+            # Read the entire source directory if days is not specified or zero
+            files = glob.glob("{}/**/*P.jpg".format(directory), recursive=True)
             result.extend(files)
+        else:
+            # Filter by date list if days is specified
+            date_list = utils.get_date_list(days)
+            for date in date_list:
+                files = glob.glob("{}/**/{}/*P.jpg".format(directory, date), recursive=True)
+                result.extend(files)
 
     return utils.fix_path_delimiter(result)
 
@@ -37,7 +42,7 @@ def organize_captures(stations_captures: list[str]):
     database.populate_tables(captures_organized)
 
 
-def get_captures(captures_dir: List[str], days: int) -> list[str]:
+def get_captures(captures_dir: List[str], days: Optional[int] = None) -> list[str]:
     files_captures = get_matching_captures(captures_dir, days)
 
     organize_captures(files_captures)

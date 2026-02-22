@@ -253,7 +253,12 @@ if __name__ == '__main__':
     configuration = config.load_config()
 
     print("- Reading captures")
-    files_captures = captures.get_captures(configuration['captures'], configuration['days'])
+    days_limit = configuration.get('days')
+    if days_limit is not None and isinstance(days_limit, int) and days_limit > 0:
+        files_captures = captures.get_captures(configuration['captures'], days_limit)
+    else:
+        # If 'days' is not specified, empty, or not a positive integer, read all
+        files_captures = captures.get_captures(configuration['captures'], None)
 
     if len(files_captures) == 0:
         print("- Nothing to do")
