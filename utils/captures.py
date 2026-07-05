@@ -39,7 +39,7 @@ def organize_captures(stations_captures: list[str]):
 
         captures_organized.append(post)
 
-    database.populate_tables(captures_organized)
+    populate_tables(captures_organized)
 
 
 def get_captures(captures_dir: List[str], days: Optional[int] = None) -> list[str]:

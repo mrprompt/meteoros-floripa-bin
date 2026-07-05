@@ -2,7 +2,7 @@ import sqlite3
 import os
 from sqlite3 import Connection as Connection
 
-DatabaseFile = 'capturas.db'
+DatabaseFile = '_capturas.db'
 
 
 def get_connection() -> Connection:

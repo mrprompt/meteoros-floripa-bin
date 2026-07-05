@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
 # -*- coding: utf8 -*-
 import os
-import re
-import datetime
-
 from utils import captures, config,  database
 from git import Repo
 
+print("- Loading site configuration")
+configuration = config.load_config()
 
-PATH = os.path.dirname(__file__)
-PATH_OF_GIT_REPO = "{}/../".format(PATH)
-CONFIG_FILE = "{}/../_config.yml".format(PATH)
-PATH_OF_SITE_POSTS = "{}/../_posts/".format(PATH)
-PATH_OF_SITE_CAPTURES = "{}/../_captures/".format(PATH)
-PATH_OF_WATCH_CAPTURES = "{}/../_watches/".format(PATH)
+
+PATH = os.path.dirname(configuration['output']['base'])
+PATH_OF_GIT_REPO = "{}/".format(PATH)
+CONFIG_FILE = "{}/_config.yml".format(PATH)
+PATH_OF_SITE_POSTS = "{}/_posts/".format(PATH)
+PATH_OF_SITE_CAPTURES = "{}/_captures/".format(PATH)
+PATH_OF_WATCH_CAPTURES = "{}/_watches/".format(PATH)
 
 
 def generate_posts():
@@ -142,9 +142,6 @@ def git_push(path_of_git_repo: str):
 
 
 if __name__ == '__main__':
-    print("- Loading site configuration")
-    configuration = config.load_config()
-
     print("- Reading captures")
     files_captures = captures.get_captures(configuration['captures'], configuration['days'])
 
@@ -163,12 +160,12 @@ if __name__ == '__main__':
     generate_watches()
 
     print("- Uploading captures (Windows only)")
-    captures.upload_captures(configuration['captures'], configuration['storage']['captures'])
+    # captures.upload_captures(configuration['captures'], configuration['storage']['captures'])
 
     print("- Push to git")
-    git_push(configuration['output']['base'])
+    # git_push(configuration['output']['base'])
 
     print("- Closing database connection")
-    database.close_connection()
+    # database.close_connection()
 
     print("- Done :)")
