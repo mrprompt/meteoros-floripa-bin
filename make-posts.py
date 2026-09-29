@@ -3,6 +3,7 @@
 import os
 from utils import captures, config,  database
 from git import Repo
+from sqlite3 import Connection
 
 print("- Loading site configuration")
 configuration = config.load_config()
@@ -16,8 +17,7 @@ PATH_OF_SITE_CAPTURES = "{}/_captures/".format(PATH)
 PATH_OF_WATCH_CAPTURES = "{}/_watches/".format(PATH)
 
 
-def generate_posts():
-    connection = database.get_connection()
+def generate_posts(connection: Connection):
     connection_cursor = connection.cursor()
     connection_cursor.execute("""
     SELECT night_start, station
@@ -85,8 +85,7 @@ def generate_posts():
         filehandle.close()
 
 
-def generate_watches():
-    connection = database.get_connection()
+def generate_watches(connection: Connection):
     connection_cursor = connection.cursor()
     connection_cursor.execute("""
     SELECT files, station
@@ -142,30 +141,27 @@ def git_push(path_of_git_repo: str):
 
 
 if __name__ == '__main__':
-    print("- Reading captures")
-    files_captures = captures.get_captures(configuration['captures'], configuration['days'])
+    connection = database.get_connection()
+    try:
+        print("- Reading captures")
+        files_captures = captures.get_captures(connection, configuration['captures'], configuration['days'])
 
-    if len(files_captures) == 0:
-        print("- Nothing to do")
+        if len(files_captures) == 0:
+            print("- Nothing to do")
+        else:
+            print("- Creating posts")
+            generate_posts(connection)
+
+            print("- Creating watches")
+            generate_watches(connection)
+
+            print("- Uploading captures (Windows only)")
+            # captures.upload_captures(configuration['captures'], configuration['storage']['captures'])
+
+            print("- Push to git")
+            # git_push(configuration['output']['base'])
+
+            print("- Done :)")
+    finally:
         print("- Closing database connection")
-
-        database.close_connection()
-
-        exit(0)
-
-    print("- Creating posts")
-    generate_posts()
-
-    print("- Creating watches")
-    generate_watches()
-
-    print("- Uploading captures (Windows only)")
-    # captures.upload_captures(configuration['captures'], configuration['storage']['captures'])
-
-    print("- Push to git")
-    # git_push(configuration['output']['base'])
-
-    print("- Closing database connection")
-    # database.close_connection()
-
-    print("- Done :)")
+        database.close_connection(connection)

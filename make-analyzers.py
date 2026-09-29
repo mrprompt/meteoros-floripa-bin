@@ -7,13 +7,13 @@ import datetime
 from utils import captures, config,  database
 from xml.dom import minidom
 from git import Repo
+from sqlite3 import Connection
 
 
 PATH_OF_ANALYZERS = "/_data/"
 
 
-def generate_analyzers():
-    connection = database.get_connection()
+def generate_analyzers(connection: Connection):
     connection_cursor = connection.cursor()
     connection_cursor.execute("""
     SELECT night_start, station
@@ -114,24 +114,21 @@ if __name__ == '__main__':
     print("- Loading site configuration")
     configuration = config.load_config()
 
-    print("- Reading captures")
-    files_captures = captures.get_captures(configuration['captures'], configuration['days'])
+    connection = database.get_connection()
+    try:
+        print("- Reading captures")
+        files_captures = captures.get_captures(connection, configuration['captures'], configuration['days'])
 
-    if len(files_captures) == 0:
-        print("- Nothing to do")
+        if len(files_captures) == 0:
+            print("- Nothing to do")
+        else:
+            print("- Creating analyzers")
+            generate_analyzers(connection)
+
+            print("- Push to git")
+            git_push(configuration['output']['base'])
+
+            print("- Done :)")
+    finally:
         print("- Closing database connection")
-
-        database.close_connection()
-
-        exit(0)
-
-    print("- Creating analyzers")
-    generate_analyzers()
-
-    print("- Push to git")
-    git_push(configuration['output']['base'])
-
-    print("- Closing database connection")
-    database.close_connection()
-
-    print("- Done :)")
+        database.close_connection(connection)

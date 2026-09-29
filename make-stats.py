@@ -1,16 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding: utf8 -*-
 from utils import captures, config,  database
+from sqlite3 import Connection
 
 
-def generate_stats(output_dir: str = "./") -> bool:
+def generate_stats(connection: Connection, output_dir: str = "./") -> bool:
     """
     Generate captures collections and pages from every station captures.
 
-    :param connection: The database connection
     :return: bool
     """
-    connection = database.get_connection()
     connection_cursor = connection.cursor()
     connection_cursor.execute("""
     SELECT COUNT(files) AS captures, capture_month, station 
@@ -48,21 +47,17 @@ if __name__ == '__main__':
     print("- Loading site configuration")
     configuration = config.load_config()
 
-    print("- Reading captures")
-    files_captures = captures.get_captures(configuration['captures'], configuration['days'])
+    connection = database.get_connection()
+    try:
+        print("- Reading captures")
+        files_captures = captures.get_captures(connection, configuration['captures'], configuration['days'])
 
-    if len(files_captures) == 0:
-        print("- Nothing to do")
+        if len(files_captures) == 0:
+            print("- Nothing to do")
+        else:
+            print("- Creating stats")
+            generate_stats(connection, configuration['output']['base'])
+            print("- Done :)")
+    finally:
         print("- Closing database connection")
-
-        database.close_connection()
-
-        exit(0)
-
-    print("- Creating stats")
-    generate_stats(configuration['output']['base'])
-
-    print("- Closing database connection")
-    database.close_connection()
-
-    print("- Done :)")
+        database.close_connection(connection)

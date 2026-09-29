@@ -6,20 +6,15 @@ import yaml
 from typing import List
 from PIL import ImageChops, Image
 from utils import captures, database, config
+from sqlite3 import Connection
 
 
 PATH = os.path.dirname(__file__)
-PATH_OF_GIT_REPO = "{}/../".format(PATH)
-CONFIG_FILE = "{}/../_config.yml".format(PATH)
-PATH_OF_SITE_POSTS = "{}/../_posts/".format(PATH)
+CONFIG_FILE = "{}/_config.yml".format(PATH)
 PATH_OF_SITE_CAPTURES = "{}/../_captures/".format(PATH)
-PATH_OF_WATCH_CAPTURES = "{}/../_watches/".format(PATH)
-PATH_OF_ANALYZERS = "{}/../_data/".format(PATH)
-PATH_OF_STATIONS = "{}/../_stations/".format(PATH)
 
 
-def generate_stacks():
-    connection = database.get_connection()
+def generate_stacks(connection: Connection):
     connection_cursor = connection.cursor()
     connection_cursor.execute("""
     SELECT night_start, station
@@ -52,21 +47,17 @@ if __name__ == '__main__':
     print("- Loading site configuration")
     configuration = config.load_config()
 
-    print("- Reading captures")
-    files_captures = captures.get_captures(configuration['captures'], configuration['days'])
+    connection = database.get_connection()
+    try:
+        print("- Reading captures")
+        files_captures = captures.get_captures(connection, configuration['captures'], configuration['days'])
 
-    if len(files_captures) == 0:
-        print("- Nothing to do")
+        if len(files_captures) == 0:
+            print("- Nothing to do")
+        else:
+            print("- Creating stacks")
+            generate_stacks(connection)
+            print("- Done :)")
+    finally:
         print("- Closing database connection")
-
-        database.close_connection()
-
-        exit(0)
-
-    print("- Creating stacks")
-    generate_stacks()
-
-    print("- Closing database connection")
-    database.close_connection()
-
-    print("- Done :)")
+        database.close_connection(connection)

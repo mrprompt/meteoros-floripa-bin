@@ -7,10 +7,10 @@ import json
 
 from utils import captures, config,  database, video
 from xml.dom import minidom
+from sqlite3 import Connection
 
 
-def generate_captures_data():
-    connection = database.get_connection()
+def generate_captures_data(connection: Connection):
     connection_cursor = connection.cursor()
     connection_cursor.execute("""
     SELECT night_start, station
@@ -86,9 +86,7 @@ def generate_captures_data():
     
     return all_captures_data
 
-
-def generate_posts_data():
-    connection = database.get_connection()
+def generate_posts_data(connection: Connection):
     connection_cursor = connection.cursor()
     connection_cursor.execute("""
     SELECT night_start, files
@@ -114,8 +112,7 @@ def generate_posts_data():
     return all_posts_data
 
 
-def generate_watches_data():
-    connection = database.get_connection()
+def generate_watches_data(connection: Connection):
     connection_cursor = connection.cursor()
     connection_cursor.execute("""
     SELECT files, station
@@ -210,35 +207,37 @@ if __name__ == '__main__':
     print("- Loading site configuration")
     configuration = config.load_config()
 
-    print("- Reading captures")
-    days_limit = configuration.get('days')
-    if days_limit is not None and isinstance(days_limit, int) and days_limit > 0:
-        files_captures = captures.get_captures([configuration['storage']['captures']], days_limit)
-    else:
-        # If 'days' is not specified, empty, or not a positive integer, read all
-        files_captures = captures.get_captures([configuration['storage']['captures']], None)
+    connection = database.get_connection()
+    try:
+        print("- Reading captures")
+        days_limit = configuration.get('days')
+        if days_limit is not None and isinstance(days_limit, int) and days_limit > 0:
+            files_captures = captures.get_captures(connection, [configuration['storage']['captures']], days_limit)
+        else:
+            # If 'days' is not specified, empty, or not a positive integer, read all
+            files_captures = captures.get_captures(connection, [configuration['storage']['captures']], None)
 
-    if len(files_captures) == 0:
-        print("- Nothing to do")
+        if len(files_captures) == 0:
+            print("- Nothing to do")
+        else:
+            all_output_data = {}
+
+            print("- Generating captures data")
+            all_output_data['captures'] = generate_captures_data(connection)
+
+            print("- Generating posts data")
+            all_output_data['posts'] = generate_posts_data(connection)
+
+            print("- Generating watches data")
+            all_output_data['watches'] = generate_watches_data(connection)
+
+            output_json_path = os.path.join(configuration['output']['base'], "capturas.json")
+            print(f"- Writing all data to {output_json_path}")
+            with open(output_json_path, "w", encoding="utf-8") as f:
+                json.dump(all_output_data, f, ensure_ascii=False, indent=2)
+
+            print("- Done :)")
+    finally:
         print("- Closing database connection")
-
-        exit(0)
-
-    all_output_data = {}
-
-    print("- Generating captures data")
-    all_output_data['captures'] = generate_captures_data()
-
-    print("- Generating posts data")
-    all_output_data['posts'] = generate_posts_data()
-
-    print("- Generating watches data")
-    all_output_data['watches'] = generate_watches_data()
-
-    output_json_path = os.path.join(configuration['output']['base'], "capturas.json")
-    print(f"- Writing all data to {output_json_path}")
-    with open(output_json_path, "w", encoding="utf-8") as f:
-        json.dump(all_output_data, f, ensure_ascii=False, indent=2)
-
-    print("- Done :)")
+        database.close_connection(connection)
     

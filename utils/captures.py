@@ -1,10 +1,11 @@
 import glob
 import re
 import sys
-from . import utils, database
+from . import utils
 from robocopy import robocopy
 from PIL import ImageChops, Image
 from typing import List, Tuple, Optional
+from sqlite3 import Connection
 
 CaptureRecord = Tuple[str, str, str, str]
 
@@ -27,7 +28,7 @@ def get_matching_captures(captures_dir: List[str], days: Optional[int] = None) -
     return utils.fix_path_delimiter(result)
 
 
-def organize_captures(stations_captures: list[str]):
+def organize_captures(stations_captures: list[str], connection: Connection):
     captures_organized: list[CaptureRecord] = []
 
     for capture in stations_captures:
@@ -39,13 +40,13 @@ def organize_captures(stations_captures: list[str]):
 
         captures_organized.append(post)
 
-    populate_tables(captures_organized)
+    populate_tables(captures_organized, connection)
 
 
-def get_captures(captures_dir: List[str], days: Optional[int] = None) -> list[str]:
+def get_captures(connection: Connection, captures_dir: List[str], days: Optional[int] = None) -> list[str]:
     files_captures = get_matching_captures(captures_dir, days)
 
-    organize_captures(files_captures)
+    organize_captures(files_captures, connection)
 
     return files_captures
 
@@ -76,8 +77,7 @@ def upload_captures(sources: List[str], captures_dest: str) -> None:
             print('Some error occurred uploading capture: ' + str(e))
 
 
-def populate_tables(captures_list: List[CaptureRecord]) -> None:
-    connection = database.get_connection()
+def populate_tables(captures_list: List[CaptureRecord], connection: Connection) -> None:
     connection_cursor = connection.cursor()
     connection_cursor.execute("""
     CREATE TABLE IF NOT EXISTS captures (

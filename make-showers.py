@@ -2,14 +2,14 @@
 # -*- coding: utf8 -*-
 import argparse
 import csv
+from sqlite3 import Connection
 
 from utils import database
 
 PATH_OF_ANALYZERS = "/_data/"
 
 
-def import_showers_file(showers_file: str):
-    connection = database.get_connection()
+def import_showers_file(showers_file: str, connection: Connection):
     connection_cursor = connection.cursor()
     connection_cursor.execute("""
         CREATE TABLE IF NOT EXISTS showers (
@@ -49,8 +49,7 @@ def import_showers_file(showers_file: str):
     connection.commit()
 
 
-def generate_shower(output_dir: str = "./"):
-    connection = database.get_connection()
+def generate_shower(connection: Connection, output_dir: str = "./"):
     connection_cursor = connection.cursor()
     connection_cursor.execute("""
     SELECT *
@@ -103,10 +102,14 @@ if __name__ == '__main__':
     args = parser.parse_args()
     csv_file = args.showers_file
 
-    print("- Importing showers data")
-    import_showers_file(csv_file)
+    connection = database.get_connection()
+    try:
+        print("- Importing showers data")
+        import_showers_file(csv_file, connection)
 
-    print("- Generating shower data to site")
-    generate_shower()
+        print("- Generating shower data to site")
+        generate_shower(connection)
 
-    print("- Done :)")
+        print("- Done :)")
+    finally:
+        database.close_connection(connection)
